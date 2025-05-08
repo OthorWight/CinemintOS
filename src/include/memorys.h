@@ -1,38 +1,33 @@
-// Memory pool for allocations
-alignas(16) char memory_pool[1024 * 1024]; // 1MB pool
-size_t pool_index = 0;
+#ifndef MEMORYS_H
+#define MEMORYS_H
 
-// Implementation of operator new[] for array allocations
-void *operator new[](size_t size)
-{
-    if (pool_index + size > sizeof(memory_pool))
-    {
-        return nullptr; // Out of memory
-    }
-    void *ptr = &memory_pool[pool_index];
-    pool_index += size;
-    return ptr;
-}
+#include <stddef.h> // For size_t
+#include <stdint.h> // For uint32_t, uint64_t, etc.
 
-// Implementation of operator delete[] (no-op for bump allocator)
-void operator delete[](void *ptr) noexcept
-{
-    // Do nothing
-}
+// --- Custom Memory Allocator Declarations ---
+// Declare the memory pool and index as extern.
+// The size of the pool can be a const extern if needed elsewhere,
+// or just managed within memorys.cpp.
+extern char memory_pool[]; // Actual size defined in .cpp
+extern size_t pool_index;
 
-// Function to read a byte from an I/O port
-uint8_t inb(uint16_t port)
-{
-    uint8_t value;
-    asm volatile("inb %1, %0" : "=a"(value) : "Nd"(port));
-    return value;
-}
+// Declare operator new[] and delete[]
+// The 'noexcept' specifier is important for delete operators and
+// for new operators that are guaranteed not to throw (like this simple one).
+// The warning you saw "operator new must not return NULL unless it is declared ‘throw()’"
+// can be addressed by marking it noexcept if it never throws, or if using C++11 or later,
+// you could use `throw(std::bad_alloc)` or `throw()` for older C++ if it could throw.
+// Since this one returns nullptr on failure, `noexcept` is appropriate.
+void* operator new[](size_t size) noexcept;
+void operator delete[](void* ptr) noexcept;
 
-static inline void outb(uint16_t port, uint8_t val)
-{
-    asm volatile("outb %0, %1" : : "a"(val), "Nd"(port));
-}
+// Consider adding a non-array version if you'll use `new MyType;`
+// void* operator new(size_t size) noexcept;
+// void operator delete(void* ptr) noexcept;
 
+
+// --- Multiboot Structures ---
+// These are type definitions, so they are fine in a header (with include guards).
 struct multiboot_info
 {
     uint32_t flags;
@@ -42,7 +37,7 @@ struct multiboot_info
     uint32_t cmdline;
     uint32_t mods_count;
     uint32_t mods_addr;
-    uint32_t syms[4];
+    uint32_t syms[4]; // Note: This field is complex if used. Often ignored.
     uint32_t mmap_length;
     uint32_t mmap_addr;
     uint32_t drives_length;
@@ -56,58 +51,43 @@ struct multiboot_info
     uint16_t vbe_interface_seg;
     uint16_t vbe_interface_off;
     uint16_t vbe_interface_len;
-    uint64_t framebuffer_addr;
+    uint64_t framebuffer_addr;      // Available if bit 12 of flags is set
     uint32_t framebuffer_pitch;
     uint32_t framebuffer_width;
     uint32_t framebuffer_height;
-    uint8_t framebuffer_bpp;
-    uint8_t framebuffer_type;
-    uint8_t color_info[6];
+    uint8_t  framebuffer_bpp;
+    uint8_t  framebuffer_type;      // 0 for indexed, 1 for direct RGB, 2 for text
+    union {
+        struct {
+            uint32_t framebuffer_palette_addr;
+            uint16_t framebuffer_palette_num_colors;
+        } indexed;
+        struct {
+            uint8_t framebuffer_red_field_position;
+            uint8_t framebuffer_red_mask_size;
+            uint8_t framebuffer_green_field_position;
+            uint8_t framebuffer_green_mask_size;
+            uint8_t framebuffer_blue_field_position;
+            uint8_t framebuffer_blue_mask_size;
+        } rgb;
+    } framebuffer_color_info; // Replaces your uint8_t color_info[6]; for clarity
 };
 
 // Memory map entry structure
 struct mmap_entry
 {
-    uint32_t size;
-    uint64_t addr;
-    uint64_t len;
-    uint32_t type;
-} __attribute__((packed));
+    uint32_t size;     // Size of this structure itself (doesn't include the +4 skip)
+    uint64_t addr;     // Starting address of the memory region
+    uint64_t len;      // Length of the memory region in bytes
+    uint32_t type;     // Type of memory region (1 = available, other values = reserved/ACPI/etc.)
+} __attribute__((packed)); // Ensure no padding
 
-// External variable from boot.asm
+// --- External Variable from Bootloader ---
+// This tells the C++ code that a symbol named mboot_info_ptr is defined elsewhere (likely boot.asm).
 extern "C" uint32_t mboot_info_ptr;
 
-// Function to get total RAM in MB
-uint32_t get_total_ram_mb(multiboot_info *mbi)
-{
-    // Check if memory info is available (bit 0 of flags)
-    if (!(mbi->flags & 0x1))
-    {
-        return 0; // Memory info not available
-    }
+// --- Function Declarations ---
+// Declare the function to get total RAM.
+uint32_t get_total_ram_mb(multiboot_info* mbi);
 
-    // Basic memory info from multiboot
-    uint32_t mem_kb = mbi->mem_lower + mbi->mem_upper;
-    uint32_t mem_mb = mem_kb / 1024;
-
-    // If memory map is available, we can get more accurate information
-    if (mbi->flags & 0x40)
-    {
-        mem_mb = 0;
-        mmap_entry *entry = (mmap_entry *)mbi->mmap_addr;
-        mmap_entry *end = (mmap_entry *)((uint32_t)mbi->mmap_addr + mbi->mmap_length);
-
-        while (entry < end)
-        {
-            // Type 1 indicates available RAM
-            if (entry->type == 1)
-            {
-                mem_mb += (entry->len / 1048576); // Convert bytes to MB
-            }
-            // Go to next entry
-            entry = (mmap_entry *)((uint32_t)entry + entry->size + 4);
-        }
-    }
-
-    return mem_mb;
-}
+#endif // MEMORYS_H

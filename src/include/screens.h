@@ -1,30 +1,31 @@
-// VGA text buffer pointer
-volatile uint16_t *vga_buffer = (uint16_t *)0xB8000;
-uint16_t cursor_x, cursor_y;
+#ifndef SCREENS_H
+#define SCREENS_H
 
-// Scroll the screen up one line
-void scroll_screen(volatile uint16_t *vga_buffer)
-{
-    for (uint16_t y = 0; y < VGA_HEIGHT - 1; y++)
-    {
-        for (uint16_t x = 0; x < VGA_WIDTH; x++)
-        {
-            vga_buffer[y * VGA_WIDTH + x] = vga_buffer[(y + 1) * VGA_WIDTH + x];
-        }
-    }
-    for (uint16_t x = 0; x < VGA_WIDTH; x++)
-    {
-        vga_buffer[(VGA_HEIGHT - 1) * VGA_WIDTH + x] = (VGA_COLOR << 8) | ' ';
-    }
-}
+#include <stdint.h> // For uint16_t
 
-void cls()
-{
-    // Clear the screen (fill with black)
-    for (uint16_t i = 0; i < VGA_WIDTH * VGA_HEIGHT; i++)
-    {
-        vga_buffer[i] = (VGA_COLOR << 8) | ' ';
-    }
-    cursor_x = 0;
-    cursor_y = 0;
-}
+// --- Screen Global Variable Declarations ---
+// Declare these as 'extern'. Their definitions will be in screen.cpp.
+// 'volatile' is important for vga_buffer as it's memory-mapped I/O.
+extern volatile uint16_t* vga_buffer;
+extern uint16_t cursor_x;
+extern uint16_t cursor_y;
+
+// --- Screen Function Declarations ---
+// Only declare the functions here. Definitions go in screen.cpp.
+
+/**
+ * @brief Clears the entire VGA text screen and resets the cursor.
+ */
+void cls();
+
+/**
+ * @brief Scrolls the screen content up by one line.
+ *        The bottom-most line is cleared.
+ * @param buffer_to_scroll Pointer to the VGA buffer to operate on.
+ *                         Typically, this will be the global vga_buffer.
+ */
+void scroll_screen(volatile uint16_t* buffer_to_scroll);
+// Alternatively, if scroll_screen always operates on the global vga_buffer:
+// void scroll_screen(); // And the implementation in screen.cpp would use the global.
+
+#endif // SCREENS_H

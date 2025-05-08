@@ -1,3 +1,10 @@
+#ifndef CONSTS_H
+#define CONSTS_H
+
+#include <stdint.h> // For uint16_t, uint8_t
+
+// --- VGA Colors Enum ---
+// This is a type definition, so it's fine in a header (with include guards).
 enum vga_color
 {
     VGA_COLOR_BLACK = 0,
@@ -14,33 +21,30 @@ enum vga_color
     VGA_COLOR_LIGHT_CYAN = 11,
     VGA_COLOR_LIGHT_RED = 12,
     VGA_COLOR_LIGHT_MAGENTA = 13,
-    VGA_COLOR_LIGHT_BROWN = 14,
+    VGA_COLOR_YELLOW = 14,       // Renamed from LIGHT_BROWN, as YELLOW is more common & needed
     VGA_COLOR_WHITE = 15,
 };
 
-#define SHIFT_PRESSED_LEFT 0x2A
+// --- Keyboard Scancode Defines ---
+// These are preprocessor macros, so they are fine in a header.
+#define SHIFT_PRESSED_LEFT  0x2A
 #define SHIFT_RELEASED_LEFT 0xAA
 #define SHIFT_PRESSED_RIGHT 0x36
 #define SHIFT_RELEASED_RIGHT 0xB6
-#define BACKSPACE 0x0E
-#define ENTER 28
-#define KEY_LIMIT 58
+#define BACKSPACE           0x0E
+#define ENTER               0x1C // Common scancode for Enter key (Set 1)
+#define KEY_LIMIT           59   // Ensure this matches the size of your scancode arrays
 
-// Constants for VGA text mode
-const uint16_t VGA_WIDTH = 80;
-const uint16_t VGA_HEIGHT = 25;
-const uint16_t VGA_COLOR = VGA_COLOR_LIGHT_GREY; // White text on black background
-int vga_mode = 0;
+// --- VGA Text Mode Constants (Declarations) ---
+// Use 'extern' to declare that these variables are defined elsewhere.
+extern const uint16_t VGA_WIDTH;
+extern const uint16_t VGA_HEIGHT;
+extern const uint16_t VGA_DEFAULT_COLOR; // Renamed to avoid conflict if VGA_COLOR is used as a variable name
+extern int vga_mode;                     // If this is truly global state, extern is correct.
 
-// Scancode to ASCII mappings
-static const char scancode_ascii_normal[] = {
-    0, 0, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 0, 0,
-    'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n', 0,
-    'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`', 0, '\\',
-    'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', 0, '*', 0, ' ', 0, 0, 0, 0, 0, 0};
+// --- Scancode to ASCII Mappings (Declarations) ---
+// Use 'extern' for these arrays as well.
+extern const char scancode_ascii_normal[KEY_LIMIT];
+extern const char scancode_ascii_shifted[KEY_LIMIT];
 
-static const char scancode_ascii_shifted[] = {
-    0, 0, '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', 0, 0,
-    'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '{', '}', '\n', 0,
-    'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', '"', '~', 0, '|',
-    'Z', 'X', 'C', 'V', 'B', 'N', 'M', '<', '>', '?', 0, '*', 0, ' ', 0, 0, 0, 0, 0, 0};
+#endif // CONSTS_H
