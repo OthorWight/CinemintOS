@@ -149,6 +149,7 @@ extern "C" void kernel_main(multiboot_info* mbi) {
             print_string("  cls              - Clear the screen\n", VGA_COLOR_WHITE);
             print_string("  echo [text]      - Print [text] to the screen\n", VGA_COLOR_WHITE);
             print_string("  calc <n1> <op> <n2> - Basic calculator (+, -, *, /)\n", VGA_COLOR_WHITE); // Added calc
+            print_string("  reboot           - Reboot the system via ACPI S4\n", VGA_COLOR_WHITE);
             print_string("  shutdown         - Power off the system via ACPI S5\n", VGA_COLOR_WHITE);
         } else if (streq_vec(input_buffer, "cls")) {
             cls();
@@ -237,6 +238,11 @@ extern "C" void kernel_main(multiboot_info* mbi) {
         } else if (streq_vec(input_buffer, "shutdown")) {
             acpi_power_off();
             print_string("ACPI shutdown sequence problem. System did not power off.\n", VGA_COLOR_LIGHT_RED);
+        } else if (streq_vec(input_buffer, "reboot")) {
+            acpi_reboot();
+            print_string("ACPI reboot sequence problem. System did not reboot.\n", VGA_COLOR_LIGHT_RED);
+            acpi_keyboard_reboot();
+            print_string("Reboot failed.\n", VGA_COLOR_LIGHT_RED);
         } else {
             print_string("Unknown command: ", VGA_COLOR_LIGHT_RED);
             print_vector_char_range(input_buffer, 0, VGA_COLOR_LIGHT_RED);

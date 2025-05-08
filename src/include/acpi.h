@@ -175,5 +175,7 @@ void acpi_init();
  * This function will not return if successful.
  */
 void acpi_power_off();
+void acpi_reboot();
+void acpi_keyboard_reboot();
 
 #endif // ACPI_H

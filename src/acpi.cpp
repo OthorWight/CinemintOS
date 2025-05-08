@@ -257,6 +257,122 @@ void acpi_init() {
     }
 }
 
+// --- ACPI Reboot Function ---
+
+// ACPI Flags definition (Bit 10 for Reset Register Support)
+#define ACPI_FADT_RESET_REG_SUPPORTED (1 << 10)
+
+// Generic Address Structure Address Spaces
+#define ACPI_GAS_MMIO 0
+#define ACPI_GAS_IO   1
+#define ACPI_GAS_PCI  2
+
+void acpi_reboot() {
+    if (!g_fadt) {
+        print_string("ACPI Reboot: FADT not found.\n", VGA_COLOR_LIGHT_RED);
+        return;
+    }
+
+    // Check if Reset Register is supported via FADT Flags bit 10
+    if (!(g_fadt->Flags & ACPI_FADT_RESET_REG_SUPPORTED)) {
+        print_string("ACPI Reboot: FADT Reset Register not supported according to flags.\n", VGA_COLOR_YELLOW);
+        // Consider falling back to keyboard controller reset here if desired
+        return;
+    }
+
+    // --- Parse the ResetReg Generic Address Structure (Simplified) ---
+    uint8_t address_space = g_fadt->ResetReg[0]; // Address Space ID
+    // uint8_t bit_width = g_fadt->ResetReg[1];  // Typically 8 for reset value
+    // uint8_t bit_offset = g_fadt->ResetReg[2]; // Typically 0
+    uint8_t access_size = g_fadt->ResetReg[3]; // 1=byte, 2=word, 3=dword
+    uint64_t address = 0;
+
+    // Extract the 64-bit address (handle potential unaligned access carefully)
+    // Using memcpy is safest way to avoid potential alignment faults if needed,
+    // but direct cast might work on x86 if structure packing is correct.
+    // Let's try direct cast first assuming pack(1) worked.
+    address = *(uint64_t*)(&g_fadt->ResetReg[4]);
+
+    print_string("ACPI Reboot: Attempting using ResetReg. AddrSpace=", VGA_COLOR_WHITE);
+    print_int(address_space, VGA_COLOR_WHITE);
+    print_string(", Addr=0x", VGA_COLOR_WHITE); print_hex(address, VGA_COLOR_WHITE); // Assuming print_hex for 64-bit
+    print_string(", AccessSize=", VGA_COLOR_WHITE); print_int(access_size, VGA_COLOR_WHITE);
+    print_string(", Value=0x", VGA_COLOR_WHITE); print_hex32(g_fadt->ResetValue, VGA_COLOR_WHITE); // Value is uint8_t
+    print_char('\n');
+
+
+    if (address_space == ACPI_GAS_IO) { // System I/O Space
+        // Common case: Byte access to an I/O port
+        if (access_size == 1) { // Byte access
+             uint16_t port = (uint16_t)address; // I/O ports are 16-bit on x86
+             print_string("ACPI Reboot: Writing ResetValue to I/O Port 0x", VGA_COLOR_YELLOW);
+             print_hex32(port, VGA_COLOR_YELLOW); print_string("...\n", VGA_COLOR_YELLOW);
+             outb(port, g_fadt->ResetValue);
+        } else {
+             print_string("ACPI Reboot: Unsupported I/O access size: ", VGA_COLOR_YELLOW);
+             print_int(access_size, VGA_COLOR_YELLOW); print_char('\n');
+             return; // Cannot handle non-byte I/O reset easily here
+        }
+    } else if (address_space == ACPI_GAS_MMIO) { // System Memory Space
+        // Less common for simple reset, but possible
+        volatile void* mem_addr = (volatile void*)((uintptr_t)address);
+         print_string("ACPI Reboot: Writing ResetValue to MMIO Addr 0x", VGA_COLOR_YELLOW);
+         print_hex(address, VGA_COLOR_YELLOW); print_string("...\n", VGA_COLOR_YELLOW);
+
+        if (access_size == 1) { // Byte access
+            *(volatile uint8_t*)mem_addr = g_fadt->ResetValue;
+        } else if (access_size == 2) { // Word access
+             *(volatile uint16_t*)mem_addr = g_fadt->ResetValue; // Note: writing 8-bit value to 16-bit reg
+        } else if (access_size == 3) { // Dword access
+             *(volatile uint32_t*)mem_addr = g_fadt->ResetValue; // Note: writing 8-bit value to 32-bit reg
+        } else {
+             print_string("ACPI Reboot: Unsupported MMIO access size: ", VGA_COLOR_YELLOW);
+             print_int(access_size, VGA_COLOR_YELLOW); print_char('\n');
+             return; // Cannot handle other sizes easily here
+        }
+    } else {
+        print_string("ACPI Reboot: Unsupported Address Space ID: ", VGA_COLOR_YELLOW);
+        print_int(address_space, VGA_COLOR_YELLOW); print_char('\n');
+        return; // Cannot handle PCI config space reset easily here
+    }
+
+    // If the write didn't immediately reboot, wait a bit then halt
+    print_string("ACPI Reboot command sent. Waiting...\n", VGA_COLOR_YELLOW);
+
+    // Crude delay
+    for(volatile int i=0; i < 5000000; ++i); // Adjust count as needed
+
+    print_string("ACPI Reboot failed? Halting.\n", VGA_COLOR_LIGHT_RED);
+    // Fallback halt
+    while (true) {
+        asm volatile("cli; hlt");
+    }
+}
+
+// --- Alternative: Keyboard Controller Reboot ---
+// This is NOT ACPI, but a common legacy method.
+void acpi_keyboard_reboot() {
+    print_string("Attempting reboot via keyboard controller...\n", VGA_COLOR_YELLOW);
+    uint8_t temp;
+
+    // Disable interrupts
+    asm volatile ("cli");
+
+    // Wait for keyboard controller input buffer to be empty
+    do {
+        temp = inb(0x64); // Read status port
+    } while ((temp & 2) != 0); // Loop while bit 1 (input buffer status) is set
+
+    // Send 0xFE (CPU Reset) command to port 0x64 (command port)
+    outb(0x64, 0xFE);
+
+    // If that didn't work, halt
+    print_string("Keyboard controller reboot command sent. Halting if it fails.\n", VGA_COLOR_YELLOW);
+    while(true) {
+         asm volatile ("hlt");
+    }
+}
+
 void acpi_power_off() {
     if (!g_fadt) {
         print_string("ACPI Shutdown: FADT not found.\n", VGA_COLOR_LIGHT_RED);
